@@ -25,12 +25,14 @@ Para instalar as dependências, execute:
 
 ```bash
 pip install camelot-py[pdf] pandas unidecode
+```
 
 Como usar
 Execute o script.
 
 ```bash
 python pdf_table_extractor.py
+```
 
 1.Uma janela será aberta para você selecionar o arquivo PDF.
 
