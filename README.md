@@ -31,7 +31,7 @@ pip install camelot-py[pdf] pandas unidecode
 1. Execute o script.
 
 ```bash
-python pdf_table_extractor.py
+python conversor_itau.py
 ```
 
 2.Uma janela será aberta para você selecionar o arquivo PDF.
