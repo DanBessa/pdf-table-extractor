@@ -46,16 +46,25 @@ class PDFTableExtractor:
             self.finalize_csv(final_csv_path)
 
     def clean_data(self, df):
-        df = df.reset_index(drop=True)  # Garante que os índices sejam únicos
-        df = df.loc[:, ~df.columns.duplicated()]  # Remove colunas duplicadas
-        df = df.dropna(axis=1, how='all')  # Remove colunas vazias
-        df.columns = df.columns.str.strip()  # Remove espaços extras dos nomes das colunas
-        
-        # Adiciona mais algumas limpezas específicas para as colunas
+        df = df.reset_index(drop=True)
+        df = df.loc[:, ~df.columns.duplicated()]
+        df = df.dropna(axis=1, how='all')
+        df.columns = df.columns.str.strip()
+
         if 'data' in df.columns:
-            df['data'] = df['data'].str.strip()  # Remove espaços extras dos valores das colunas
+            df['data'] = df['data'].str.strip()
+
+        for column in df.columns:
+            df[column] = df[column].apply(self.fix_hyphen)
 
         return df
+
+    def fix_hyphen(self, value):
+        if isinstance(value, str):
+            value = value.strip()
+            value = value.replace(".", "")
+            value = re.sub(r'(\d+),(\d+)-$', r'-\1,\2', value)
+        return value
 
     def debug_dataframes(self, df1, df2):
         print("DataFrame principal:")
@@ -120,7 +129,7 @@ class PDFTableExtractor:
         df.columns = df.columns.map(lambda x: x.replace(' ', '_'))  
         df.columns = df.columns.map(lambda x: x.lower())  
 
-        df = df.loc[:, ~df.columns.duplicated()]  # Remove colunas duplicadas
+        df = df.loc[:, ~df.columns.duplicated()]
         df = df.loc[:, ~df.columns.str.contains(r'^Unnamed:\s*\d+', regex=True)]
         if 'data_de_insercao' in df.columns:
             df = df.drop('data_de_insercao', axis=1)
@@ -129,13 +138,14 @@ class PDFTableExtractor:
 
     def fill_empty_dates(self, df, date_column_name):
         if date_column_name in df.columns:
-            df[date_column_name] = df[date_column_name].replace('', pd.NA)  # Substitui strings vazias por NA
-            df[date_column_name] = df[date_column_name].ffill()  # Preenche valores vazios com a última data válida
+            df[date_column_name] = df[date_column_name].replace('', pd.NA)
+            df[date_column_name] = df[date_column_name].ffill()
         return df
 
     def remove_credit_debit_repeats(self, df):
         credit_column = 'credito'
         debit_column = 'debito'
+        history_column = 'historico'
 
         if credit_column in df.columns:
             df[credit_column] = df[credit_column].replace('', pd.NA)
@@ -145,7 +155,9 @@ class PDFTableExtractor:
             df[debit_column] = df[debit_column].replace('', pd.NA)
             df[debit_column] = df[debit_column].bfill()
 
-        df = df.drop_duplicates()
+        if history_column in df.columns:
+            df[history_column] = df[history_column].replace('', pd.NA)
+
         return df
 
     def finalize_csv(self, final_csv):
