@@ -98,9 +98,9 @@ def extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao):
         for linha in extracted_data:
             writer.writerow(linha)
 
-    messagebox.showinfo("Sucesso", f"✅ Extração concluída! O arquivo foi salvo em:\n{output_csv}")
+    print(f"✅ CSV gerado: {output_csv}")  # Exibe no terminal para acompanhar a conversão
 
-def selecionar_pdf():
+def selecionar_pdfs():
     root = tk.Tk()
     root.withdraw()  
     
@@ -116,12 +116,18 @@ def selecionar_pdf():
         messagebox.showwarning("Aviso", "Nenhum código de aplicação foi inserido. Cancelando operação.")
         return
 
-    pdf_path = filedialog.askopenfilename(title="Selecione o arquivo PDF", filetypes=[("Arquivos PDF", "*.pdf")])
-    if not pdf_path:
+    # Seleciona vários arquivos PDF
+    pdf_paths = filedialog.askopenfilenames(title="Selecione os arquivos PDF", filetypes=[("Arquivos PDF", "*.pdf")])
+    
+    if not pdf_paths:
         messagebox.showwarning("Aviso", "Nenhum arquivo PDF foi selecionado.")
         return
 
-    extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao)
+    # Processa cada PDF selecionado
+    for pdf_path in pdf_paths:
+        extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao)
+
+    messagebox.showinfo("Sucesso", "✅ Todos os PDFs foram processados com sucesso!")
 
 if __name__ == "__main__":
-    selecionar_pdf()
+    selecionar_pdfs()
