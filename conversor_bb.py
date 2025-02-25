@@ -24,7 +24,7 @@ def formatar_valor_financeiro(valor, proximo_texto):
     valor = re.sub(r"[DCdc]$", "", valor)  # Remove apenas se estiver no final
     return valor
 
-def extract_data_from_pdf(pdf_path, codigo_banco):
+def extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao):
     extracted_data = []
     current_date = ""
     capture_next = False  
@@ -65,15 +65,24 @@ def extract_data_from_pdf(pdf_path, codigo_banco):
                     proximo_texto = words[i + 1]["text"].strip() if i + 1 < len(words) else ""  
                     valor_formatado = formatar_valor_financeiro(text, proximo_texto)  
 
-                    # Determina se o valor será crédito ou débito
-                    credito, debito = ("", codigo_banco) if valor_formatado.startswith("-") else (codigo_banco, "")
+                    # 🔍 Normaliza o histórico para evitar problemas de detecção
+                    current_history_normalized = remover_caracteres_especiais(current_history).lower()
 
-                    # Se crédito ou débito ficarem vazios, insere '6'
-                    credito = credito if credito else "6"
+                    # 📌 Se o histórico contém "Rende Fácil"
+                    if "rende facil" in current_history_normalized:  
+                        if valor_formatado.startswith("-"):  # Se for negativo
+                            debito, credito = codigo_aplicacao, codigo_banco
+                        else:  # Se for positivo
+                            debito, credito = codigo_banco, codigo_aplicacao
+                    else:
+                        debito, credito = (codigo_banco, "") if valor_formatado.startswith("-") else ("", codigo_banco)
+
+                    # Se débito ou crédito ficarem vazios, insere '6'
                     debito = debito if debito else "6"
+                    credito = credito if credito else "6"
 
                     if current_history:  
-                        extracted_data.append([current_date, current_history, valor_formatado, credito, debito])  
+                        extracted_data.append([debito, credito, current_date, valor_formatado, current_history])  
 
                     current_history = ""  
                     historico_y = None  
@@ -85,7 +94,7 @@ def extract_data_from_pdf(pdf_path, codigo_banco):
 
     with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile, delimiter=";")  
-        writer.writerow(["Data", "Histórico", "Valor", "Crédito", "Débito"])
+        writer.writerow(["Débito", "Crédito", "Data", "Valor", "Histórico"])  # ✅ Ajuste na ordem das colunas
         for linha in extracted_data:
             writer.writerow(linha)
 
@@ -97,18 +106,22 @@ def selecionar_pdf():
     
     # Pergunta o código do banco ao usuário
     codigo_banco = simpledialog.askstring("Código do Banco", "Digite o código do banco:")
-    
     if not codigo_banco:
         messagebox.showwarning("Aviso", "Nenhum código foi inserido. Cancelando operação.")
         return
 
+    # Pergunta o código da conta de aplicação
+    codigo_aplicacao = simpledialog.askstring("Código da Conta de Aplicação", "Digite o código da conta de aplicação:")
+    if not codigo_aplicacao:
+        messagebox.showwarning("Aviso", "Nenhum código de aplicação foi inserido. Cancelando operação.")
+        return
+
     pdf_path = filedialog.askopenfilename(title="Selecione o arquivo PDF", filetypes=[("Arquivos PDF", "*.pdf")])
-    
     if not pdf_path:
         messagebox.showwarning("Aviso", "Nenhum arquivo PDF foi selecionado.")
         return
 
-    extract_data_from_pdf(pdf_path, codigo_banco)
+    extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao)
 
 if __name__ == "__main__":
     selecionar_pdf()
