@@ -19,7 +19,6 @@ class PDFTableExtractor:
 
         page_numbers = self.parse_pages(pages_with_tables)
         main = pd.DataFrame()
-
         if '1' in page_numbers:
             header = self.get_table_data('page_1', '1')
             page_numbers.remove('1')
@@ -164,10 +163,6 @@ class PDFTableExtractor:
         if debit_column in df.columns:
             df[debit_column] = df[debit_column].replace('', pd.NA)
             df[debit_column] = df[debit_column].bfill()
-
-        df = df.drop_duplicates()
-        if history_column in df.columns:
-            df[history_column] = df[history_column].replace('', pd.NA)
 
         return df
 
