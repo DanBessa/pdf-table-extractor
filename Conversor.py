@@ -2,13 +2,13 @@ import os
 import sys
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
-from PIL import Image, ImageTk
+from PIL import Image
+from customtkinter import CTkImage
 
-# Configuração do tema do CustomTkinter
-ctk.set_appearance_mode("System")  # Modo de aparência (System, Light, Dark)
-ctk.set_default_color_theme("blue")  # Tema de cores
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("green")
 
-executado = False  # Variável de controle para evitar chamadas duplicadas
+executado = False
 
 def escolher_banco():
     global banco_selecionado
@@ -18,97 +18,94 @@ def escolher_banco():
         global banco_selecionado
         banco_selecionado = banco
         janela.quit()
+        janela.destroy()
 
-    # Verifica se o programa está sendo executado como um executável ou script
     if getattr(sys, 'frozen', False):
         caminho_base = sys._MEIPASS
     else:
         caminho_base = os.path.dirname(os.path.abspath(__file__))
 
-    # Configuração da janela principal
     janela = ctk.CTk()
     janela.title("Conversor bancário")
-    janela.geometry("300x200")
+    janela.geometry("600x450")
     janela.resizable(False, False)
 
-    # Carrega o ícone da janela
-    caminho_icone = os.path.join(caminho_base, "rclogo.ico")
-    if os.path.exists(caminho_icone):
-        try:
-            janela.iconbitmap(caminho_icone)
-        except Exception as e:
-            print(f"Erro ao carregar ícone: {e}")
-
-    # Função para carregar imagens dos botões
     def carregar_imagem(caminho, tamanho):
         try:
-            imagem = Image.open(caminho).resize(tamanho, Image.LANCZOS)
-            return ImageTk.PhotoImage(imagem)
+            imagem = Image.open(caminho)
+            return CTkImage(dark_image=imagem, light_image=imagem, size=tamanho)
         except Exception as e:
             print(f"Erro ao carregar imagem {caminho}: {e}")
             return None
 
-    # Caminhos das imagens dos bancos
     caminho_bb = os.path.join(caminho_base, "bblogo.ico")
     caminho_itau = os.path.join(caminho_base, "itaulogo.png")
     caminho_inter = os.path.join(caminho_base, "inter.png")
     caminho_sicoob = os.path.join(caminho_base, "sicoob2.png")
+    caminho_bradesco = os.path.join(caminho_base, "bradesco.png")
+    caminho_pagbank = os.path.join(caminho_base, "pagbank.png")
+    caminho_santander = os.path.join(caminho_base, "santander.png")
+    caminho_cef = os.path.join(caminho_base, "cef.png")
 
-    # Carrega as imagens
-    icone_bb = carregar_imagem(caminho_bb, (20, 18))
-    icone_itau = carregar_imagem(caminho_itau, (25, 15))
-    icone_inter = carregar_imagem(caminho_inter, (25, 22))
-    icone_sicoob = carregar_imagem(caminho_sicoob, (50, 50))
+    icone_bb = carregar_imagem(caminho_bb, (30, 30))
+    icone_itau = carregar_imagem(caminho_itau, (30, 30))
+    icone_inter = carregar_imagem(caminho_inter, (30, 30))
+    icone_sicoob = carregar_imagem(caminho_sicoob, (30, 30))
+    icone_bradesco = carregar_imagem(caminho_bradesco, (30, 30))
+    icone_pagbank = carregar_imagem(caminho_pagbank, (30, 30))
+    icone_santander = carregar_imagem(caminho_santander, (30, 30))
+    icone_cef = carregar_imagem(caminho_cef, (30, 30))
 
-    # Título da janela
-    titulo = ctk.CTkLabel(janela, text="Escolha o banco:", font=("Arial", 14))
+    titulo = ctk.CTkLabel(janela, text="Conversor Bancário", font=("Segoe UI", 20, "bold"))
     titulo.pack(pady=10)
 
-    # Botões para selecionar o banco
-    btn_bb = ctk.CTkButton(
-        janela,
-        text="",
-        font=("Arial", 12),
-        command=lambda: selecionar_banco("bb"),
-        image=icone_bb,
-        compound="left"
-    )
-    btn_bb.pack(pady=5)
+    tabs = ctk.CTkTabview(janela, width=550, height=300)
+    tabs.pack(pady=10)
 
-    btn_inter = ctk.CTkButton(
-        janela,
-        text="",
-        font=("Arial", 12),
-        command=lambda: selecionar_banco("inter"),
-        image=icone_inter,
-        compound="left"
-    )
-    btn_inter.pack(pady=5)
+    tab_bancos = tabs.add("Bancos")
 
-    btn_itau = ctk.CTkButton(
-        janela,
-        text="",
-        font=("Arial", 12),
-        command=lambda: selecionar_banco("itau"),
-        image=icone_itau,
-        compound="left"
-    )
-    btn_itau.pack(pady=5)
-    
-    btn_sicoob = ctk.CTkButton(
-        janela,
-        text="",
-        font=("Arial", 12),
-        command=lambda: selecionar_banco("sicoob"),
-        image=icone_sicoob,
-        compound="left"
-    )
-    btn_sicoob.pack(pady=5)
+    frame_botoes = ctk.CTkFrame(tab_bancos)
+    frame_botoes.pack(pady=10)
+
+    botoes = [
+        ("Banco do Brasil", icone_bb, "bb"),
+        ("Banco Inter", icone_inter, "inter"),
+        ("Itaú", icone_itau, "itau"),
+        ("Sicoob", icone_sicoob, "sicoob"),
+        ("Bradesco", icone_bradesco, "bradesco"),
+        ("PagBank", icone_pagbank, "pagbank"),
+        ("Santander", icone_santander, "santander"),
+        ("Caixa Economica Federal", icone_cef, "cef"),
+    ]
+
+    colunas = 2
+    largura_botao = 240
+    estilo_botao = {
+        "font": ("Segoe UI", 13),
+        "width": largura_botao,
+        "anchor": "w",
+        "cursor": "hand2",
+        "hover_color": "#2D91F2",
+        "master": frame_botoes,
+    }
+
+    for idx, (nome, icone, chave) in enumerate(botoes):
+        linha = idx // colunas
+        coluna = idx % colunas
+        btn = ctk.CTkButton(
+            image=icone,
+            text=nome,
+            compound="left",
+            command=lambda b=chave: selecionar_banco(b),
+            **estilo_botao
+        )
+        btn.grid(row=linha, column=coluna, padx=20, pady=10, sticky="w")
 
     janela.mainloop()
     return banco_selecionado
 
-# Função principal
+
+# Execução principal
 if __name__ == "__main__":
     banco = escolher_banco()
 
@@ -116,6 +113,7 @@ if __name__ == "__main__":
         try:
             import conversor_bb
             conversor_bb.selecionar_pdfs()
+            messagebox.showinfo("Sucesso", "Extração do Banco do Brasil concluída com sucesso!")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar o Banco do Brasil: {e}")
         finally:
@@ -126,8 +124,8 @@ if __name__ == "__main__":
             import conversor_inter
             file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
             if file_path:
-                conversor_inter.extrair_dados_inter(file_path)  # Agora passamos o caminho do arquivo
-                messagebox.showinfo("Sucesso", "Conversão concluída com sucesso!")
+                conversor_inter.extrair_dados_inter(file_path)
+                messagebox.showinfo("Sucesso", "Extração do Banco Inter concluída com sucesso!")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar o Banco Inter: {e}")
         finally:
@@ -137,8 +135,52 @@ if __name__ == "__main__":
         try:
             import conversor_sicoob
             conversor_sicoob.selecionar_pdf()
+            messagebox.showinfo("Sucesso", "Extração do Banco Sicoob concluída com sucesso!")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar o Banco Sicoob: {e}")
+        finally:
+            sys.exit()
+
+    elif banco == "bradesco":
+        try:
+            import conversor_bradesco
+            conversor_bradesco.main()
+            messagebox.showinfo("Sucesso", "Extração do Banco Bradesco concluída com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar o Banco Bradesco: {e}")
+        finally:
+            sys.exit()
+
+
+    elif banco == "pagbank":
+        try:
+            import conversor_pagbank
+            pdf_path = conversor_pagbank.selecionar_pdfs()
+            if pdf_path:
+                conversor_pagbank.extrair_texto_pdf(pdf_path)
+                messagebox.showinfo("Sucesso", "Extração do PagBank concluída com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar o PagBank: {e}")
+        finally:
+            sys.exit()
+
+    elif banco == "santander":
+        try:
+            import conversor_santander
+            conversor_santander.iniciar_extracao_santander()
+            messagebox.showinfo("Sucesso", "Extração do Santander concluída com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar o Santander: {e}")
+        finally:
+            sys.exit()
+
+    elif banco == "cef":
+        try:
+            import conversor_cef
+            conversor_cef.iniciar_processamento_cef()
+            messagebox.showinfo("Sucesso", "Extração da Caixa Economica Federal concluída com sucesso!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar o Santander: {e}")
         finally:
             sys.exit()
 
@@ -162,7 +204,7 @@ if __name__ == "__main__":
                 }
                 extractor = conversor_itau.PDFTableExtractor(file_path, configs)
                 extractor.start()
-                messagebox.showinfo("Sucesso", "Conversão concluída com sucesso!")
+                messagebox.showinfo("Sucesso", "Extração do Banco Itaú concluída com sucesso!")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao processar o Banco Itaú: {e}")
         finally:
