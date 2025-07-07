@@ -1,133 +1,138 @@
 import pdfplumber
-import csv
-import unicodedata
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-import os
-import re  
+import re
+import pandas as pd
+from typing import Optional
+import os # Importado para manipular nomes e caminhos de arquivos
 
-def remover_caracteres_especiais(texto):
-    """ Remove acentos e caracteres especiais. """
-    return ''.join(
-        c for c in unicodedata.normalize('NFKD', texto) 
-        if not unicodedata.combining(c)
+# Adiciona as importações necessárias para a interface gráfica
+import tkinter as tk
+from tkinter import filedialog
+
+def limpar_e_converter_valor(valor_str: Optional[str]) -> float:
+    """
+    Converte a string de valor do extrato para um número float.
+    Ex: "40.000,00 D" -> -40000.0
+    Ex: "200,00 C" -> 200.0
+    """
+    if not valor_str:
+        return 0.0
+
+    valor_limpo = valor_str.replace('.', '').replace(',', '.').strip()
+
+    valor_final = 0.0
+    match = re.search(r'([\d\.]+)\s*([CD])', valor_limpo)
+    if match:
+        valor_numerico, tipo = match.groups()
+        valor_final = float(valor_numerico)
+        if tipo == 'D':
+            valor_final *= -1
+            
+    return valor_final
+
+def extrair_transacoes_de_pdf(caminho_pdf: str) -> Optional[pd.DataFrame]:
+    """
+    Extrai as transações de um extrato bancário em PDF com um layout específico.
+    """
+    transacoes = []
+    padrao_linha_transacao = re.compile(r'^\d{2}/\d{2}/\d{2,4}')
+
+    try:
+        with pdfplumber.open(caminho_pdf) as pdf:
+            linhas_texto = []
+            for pagina in pdf.pages:
+                texto_pagina = pagina.extract_text(x_tolerance=2, y_tolerance=3)
+                if texto_pagina:
+                    linhas_texto.extend(texto_pagina.split('\n'))
+            
+            transacao_atual = None
+            for linha in linhas_texto:
+                if padrao_linha_transacao.search(linha):
+                    if transacao_atual:
+                        descricao_completa = ' '.join(transacao_atual['Lançamento']).strip()
+                        transacao_atual['Lançamento'] = re.sub(r'\s+', ' ', descricao_completa)
+                        transacoes.append(transacao_atual)
+
+                    partes = linha.split()
+                    data = partes[0]
+                    
+                    valor_str = None
+                    valor_match = re.search(r'([\d\.,]+\s[CD])$', linha)
+                    if valor_match:
+                        valor_str = valor_match.group(1)
+
+                    descricao_inicial = linha.replace(data, '', 1).strip()
+                    if valor_str:
+                        descricao_inicial = descricao_inicial.replace(valor_str, '').strip()
+
+                    transacao_atual = {
+                        "Data": data,
+                        "Lançamento": [descricao_inicial],
+                        "Valor": limpar_e_converter_valor(valor_str)
+                    }
+                elif transacao_atual:
+                    if not re.search(r'(Lançamentos|Histórico|Saldo Anterior|SALDO|G336)', linha):
+                        transacao_atual['Lançamento'].append(linha.strip())
+            
+            if transacao_atual:
+                descricao_completa = ' '.join(transacao_atual['Lançamento']).strip()
+                transacao_atual['Lançamento'] = re.sub(r'\s+', ' ', descricao_completa)
+                transacoes.append(transacao_atual)
+        
+        if not transacoes:
+            return None
+
+        df = pd.DataFrame(transacoes)
+        df = df[~df['Lançamento'].str.contains("Saldo Anterior", na=False)]
+        df = df[df['Valor'] != 0.0]
+        
+        return df
+
+    except Exception as e:
+        print(f"Ocorreu um erro ao processar o arquivo {os.path.basename(caminho_pdf)}: {e}")
+        return None
+
+# --- Bloco principal para execução do script ---
+if __name__ == '__main__':
+    # --- Parte 1: Seleção dos arquivos PDF de entrada ---
+    root = tk.Tk()
+    root.withdraw()
+
+    caminhos_dos_arquivos = filedialog.askopenfilenames(
+        title="Selecione os extratos em PDF para processar",
+        filetypes=[("Arquivos PDF", "*.pdf"), ("Todos os arquivos", "*.*")]
     )
 
-def formatar_valor_financeiro(valor, proximo_texto):
-    """ Se o valor terminar com 'D' ou o próximo texto for 'D', transforma corretamente antes de remover. """
-    valor = valor.strip().replace(" ", "")  
-    valor = remover_caracteres_especiais(valor)  
-
-    if valor.endswith("D") or valor.endswith("d") or proximo_texto in ["D", "d"]:  
-        valor = "-" + valor[:-1].strip() if valor.endswith(("D", "d")) else "-" + valor
-
-    valor = re.sub(r"[DCdc]$", "", valor)  # Remove apenas se estiver no final
-    return valor
-
-def extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao):
-    extracted_data = []
-    current_date = ""
-    capture_next = False  
-    historico_y = None  
-
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            words = page.extract_words()
-            current_history = ""  
-
-            i = 0
-            while i < len(words):
-                word = words[i]
-                x0 = float(word["x0"])
-                y0 = float(word["top"])  
-                text = remover_caracteres_especiais(word["text"].strip())
-
-                # Captura a Data
-                if 50 <= x0 <= 90 and "/" in text and len(text) == 10:
-                    current_date = text
-                    capture_next = True  
-                    historico_y = None  
-                    i += 1
-                    continue
-
-                # Captura a PRIMEIRA linha do histórico e ignora a segunda
-                if 200 <= x0 <= 360 and capture_next:
-                    if historico_y is None:  
-                        historico_y = y0
-                        current_history = text
-                    elif abs(y0 - historico_y) < 2:  
-                        current_history += " " + text
-                    else:  
-                        capture_next = False  
-
-                # Captura o Valor financeiro e aplica a formatação correta
-                elif 470 <= x0 <= 510:
-                    proximo_texto = words[i + 1]["text"].strip() if i + 1 < len(words) else ""  
-                    valor_formatado = formatar_valor_financeiro(text, proximo_texto)  
-
-                    # 🔍 Normaliza o histórico para evitar problemas de detecção
-                    current_history_normalized = remover_caracteres_especiais(current_history).lower()
-
-                    # 📌 Se o histórico contém "Rende Fácil"
-                    if "rende facil" in current_history_normalized:  
-                        if valor_formatado.startswith("-"):  # Se for negativo
-                            debito, credito = codigo_aplicacao, codigo_banco
-                        else:  # Se for positivo
-                            debito, credito = codigo_banco, codigo_aplicacao
-                    else:
-                        debito, credito = (codigo_banco, "") if valor_formatado.startswith("-") else ("", codigo_banco)
-
-                    # Se débito ou crédito ficarem vazios, insere '6'
-                    debito = debito if debito else "6"
-                    credito = credito if credito else "6"
-
-                    if current_history:  
-                        extracted_data.append([debito, credito, current_date, valor_formatado, current_history])  
-
-                    current_history = ""  
-                    historico_y = None  
+    # --- Parte 2: Processar cada arquivo e salvar individualmente ---
+    if not caminhos_dos_arquivos:
+        print("Nenhum arquivo foi selecionado. Encerrando o programa.")
+    else:
+        sucessos = 0
+        print(f"\n{len(caminhos_dos_arquivos)} arquivo(s) selecionado(s). Iniciando processamento...\n")
+        
+        for arquivo_path in caminhos_dos_arquivos:
+            nome_arquivo_original = os.path.basename(arquivo_path)
+            print(f"--- Processando: {nome_arquivo_original} ---")
+            
+            df_transacoes = extrair_transacoes_de_pdf(arquivo_path)
+            
+            if df_transacoes is not None and not df_transacoes.empty:
+                print(f"{len(df_transacoes)} transações encontradas.")
                 
-                i += 1  
+                # Gera o novo nome do arquivo, trocando a extensão .pdf por .csv
+                nome_base, _ = os.path.splitext(arquivo_path)
+                caminho_csv = nome_base + '.csv'
+                
+                try:
+                    # Salva o DataFrame no novo caminho do CSV
+                    df_transacoes.to_csv(caminho_csv, index=False, sep=';', encoding='utf-8-sig')
+                    print(f"SUCESSO! Resultado salvo em: {caminho_csv}\n")
+                    sucessos += 1
+                except Exception as e:
+                    print(f"ERRO! Não foi possível salvar o arquivo CSV para '{nome_arquivo_original}'. Motivo: {e}\n")
+                    
+            else:
+                print("Nenhuma transação válida foi encontrada neste arquivo.\n")
 
-    # Criar o nome do arquivo CSV na mesma pasta do PDF
-    output_csv = os.path.splitext(pdf_path)[0] + ".csv"
-
-    with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile, delimiter=";")  
-        writer.writerow(["Débito", "Crédito", "Data", "Valor", "Histórico"])  # ✅ Ajuste na ordem das colunas
-        for linha in extracted_data:
-            writer.writerow(linha)
-
-    print(f"✅ CSV gerado: {output_csv}")  # Exibe no terminal para acompanhar a conversão
-
-def selecionar_pdfs():
-    root = tk.Tk()
-    root.withdraw()  
-    
-    # Pergunta o código do banco ao usuário
-    codigo_banco = simpledialog.askstring("Código do Banco", "Digite o código do banco:")
-    if not codigo_banco:
-        messagebox.showwarning("Aviso", "Nenhum código foi inserido. Cancelando operação.")
-        return
-
-    # Pergunta o código da conta de aplicação
-    codigo_aplicacao = simpledialog.askstring("Código da Conta de Aplicação", "Digite o código da conta de aplicação:")
-    if not codigo_aplicacao:
-        messagebox.showwarning("Aviso", "Nenhum código de aplicação foi inserido. Cancelando operação.")
-        return
-
-    # Seleciona vários arquivos PDF
-    pdf_paths = filedialog.askopenfilenames(title="Selecione os arquivos PDF", filetypes=[("Arquivos PDF", "*.pdf")])
-    
-    if not pdf_paths:
-        messagebox.showwarning("Aviso", "Nenhum arquivo PDF foi selecionado.")
-        return
-
-    # Processa cada PDF selecionado
-    for pdf_path in pdf_paths:
-        extract_data_from_pdf(pdf_path, codigo_banco, codigo_aplicacao)
-
-    messagebox.showinfo("Sucesso", "✅ Todos os PDFs foram processados com sucesso!")
-
-if __name__ == "__main__":
-    selecionar_pdfs()
+        print("="*60)
+        print(f"Processamento concluído. {sucessos} de {len(caminhos_dos_arquivos)} arquivo(s) foram convertidos com sucesso.")
+        print("="*60)
