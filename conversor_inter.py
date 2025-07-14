@@ -10,7 +10,9 @@ def selecionar_pdfs(pdf_path=None):
     if not pdf_path:
         root = tk.Tk()
         root.withdraw()
-        pdf_path = filedialog.askopenfilename(title="Banco Inter", filetypes=[("Arquivos PDF", "*.pdf")])
+        pdf_path = filedialog.askopenfilenames(
+            title="Banco Inter", filetypes=[("Arquivos PDF", "*.pdf")]
+        )
 
         if not pdf_path:
             messagebox.showwarning("Aviso", "Nenhum arquivo PDF foi selecionado.")
@@ -34,6 +36,7 @@ def extrair_dados_inter(pdf_path):
     }
 
     date_pattern = re.compile(r"(\d{1,2}) de (\w+) de (\d{4})")
+    valor_pattern = re.compile(r"(-?)R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})")
     ultima_data = "01/01/2000"
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -41,30 +44,38 @@ def extrair_dados_inter(pdf_path):
             text = page.extract_text()
             if text:
                 lines = text.split("\n")
-                
+
                 for line in lines:
                     date_match = date_pattern.search(line)
                     if date_match:
                         dia, mes, ano = date_match.groups()
                         mes_numero = meses.get(mes, "00")
                         ultima_data = f"{dia}/{mes_numero}/{ano}"
-                    
-                    elif any(kw in line for kw in ["Pix recebido", "Pix enviado", "Pagamento efetuado"]):
-                        parts = line.split("R$")
-                        if len(parts) >= 2:
-                            historico = parts[0].strip()
-                            valor = parts[1].strip().split()[0].replace(".", "").replace(",", ".")
-                            datas.append(ultima_data)
-                            historicos.append(historico)
-                            valores.append(valor)
+
+                    match = valor_pattern.search(line)
+                    if match:
+                        sinal = match.group(1)
+                        valor = match.group(2)
+                        historico = line[:match.start()].strip()
+
+                        valor = f"-{valor}" if sinal == "-" else valor
+                        valor = re.sub(r"\.(?=\d{3},)", "", valor)
+                        historico = historico.replace('"', '').replace("'", "")
+
+                        datas.append(ultima_data)
+                        historicos.append(historico)
+                        valores.append(valor)
 
     df = pd.DataFrame({"Data": datas, "Histórico": historicos, "Valor": valores})
-    df.to_csv(csv_path, index=False, sep=';', encoding='utf-8')
+    df.drop_duplicates(inplace=False)
+    df.to_csv(csv_path, index=False, sep=';', encoding="utf-8-sig")
 
     print(f"Arquivo salvo com sucesso: {csv_path}")
     return csv_path
 
 if __name__ == "__main__":
-    pdf_path = selecionar_pdfs()
-    if pdf_path:
-        extrair_dados_inter(pdf_path)
+    pdf_paths = selecionar_pdfs()
+    if pdf_paths:
+        for i, pdf in enumerate(pdf_paths, 1):
+            print(f"[{i}/{len(pdf_paths)}] Processando: {os.path.basename(pdf)}")
+            extrair_dados_inter(pdf)

@@ -4,7 +4,7 @@ import pandas as pd
 import re
 from unidecode import unidecode
 from tkinter import Tk, simpledialog
-from tkinter.filedialog import askopenfilename
+from tkinter.filedialog import askopenfilenames
 
 class PDFTableExtractor:
     def __init__(self, file_path, configs):
@@ -180,7 +180,7 @@ class PDFTableExtractor:
 if __name__ == "__main__":
     root = Tk()
     root.withdraw()
-    file_path = askopenfilename(filetypes=[("PDF files", "*.pdf")])
+    file_path = askopenfilenames(filetypes=[("PDF files", "*.pdf")])
     root.destroy()
 
     if file_path:
