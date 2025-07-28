@@ -1,8 +1,7 @@
-# conversor_sicoobmod1.py
+# conversor_sicoobmod1.py (Corrigido)
 
 import pdfplumber
 import pandas as pd
-import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
 import re
@@ -11,8 +10,6 @@ def extrair_dados_do_pdf(caminho_pdf):
     """
     Extrai dados de transações (Modelo 1) e RETORNA um DataFrame.
     """
-    # Esta regex de data é muito específica e pode falhar.
-    # O ideal é usar o método do Modelo 2, mas mantendo este para compatibilidade.
     date_pattern = re.compile(r"^(\d{2}\/\d{2}\/\d{4})")
     value_pattern = re.compile(r"([\d\.,]+)([CD])$")
     
@@ -29,7 +26,6 @@ def extrair_dados_do_pdf(caminho_pdf):
                 linhas = texto_pagina.split('\n')
                 
                 for linha in linhas:
-                    # Lógica de extração original
                     if "SALDO ANTERIOR" in linha or "SALDO DO DIA" in linha or "EXTRATO CONTA CORRENTE" in linha:
                         continue
 
@@ -39,84 +35,70 @@ def extrair_dados_do_pdf(caminho_pdf):
 
                     match_valor = value_pattern.search(linha.strip())
                     if match_valor and data_atual:
-                        valor = f"{match_valor.group(1)}{match_valor.group(2)}"
+                        valor_original = f"{match_valor.group(1)}{match_valor.group(2)}"
                         lancamento = linha[:match_valor.start()].strip()
                         
                         if match_data:
                             lancamento = lancamento[match_data.end():].strip()
                         
+                        # Remove o número do documento que pode vir no início
                         lancamento = re.sub(r"^\S+\s", "", lancamento, count=1)
 
                         if lancamento:
-                            transacoes.append([data_atual, lancamento.strip(), valor])
+                            transacoes.append([data_atual, lancamento.strip(), valor_original])
 
         if not transacoes:
-            return pd.DataFrame() # Retorna DataFrame vazio se não achar nada
+            return pd.DataFrame()
 
         df = pd.DataFrame(transacoes, columns=["Data", "Lancamento", "Valor_Original"])
 
+        # --- FUNÇÃO DE FORMATAÇÃO CORRIGIDA ---
         def formatar_valor(valor_str):
-            valor_limpo = valor_str.replace('.', ',')
-            if valor_limpo.endswith('D'):
-                return '-' + valor_limpo[:-1]
-            elif valor_limpo.endswith('C'):
-                return valor_limpo[:-1]
-            return valor_limpo
+            """
+            Formata o valor para o padrão CSV brasileiro.
+            Ex: "1.234,56D" -> "-1234,56"
+            """
+            # Verifica se é Débito (D) e remove a letra
+            is_debit = valor_str.endswith('D')
+            valor_numerico_str = valor_str[:-1]
+
+            # 1. Remove o ponto separador de milhar.
+            valor_sem_ponto = valor_numerico_str.replace('.', '')
+            
+            # 2. Adiciona o sinal de negativo se for débito.
+            if is_debit:
+                return '-' + valor_sem_ponto
+            else:
+                return valor_sem_ponto
 
         df['Valor'] = df['Valor_Original'].apply(formatar_valor)
         df_final = df[["Data", "Lancamento", "Valor"]]
         
-        # ALTERAÇÃO: A função agora retorna o DataFrame.
         return df_final
 
     except Exception as e:
         messagebox.showerror("Erro no Modelo 1", f"Ocorreu um erro ao processar o PDF:\n{e}")
-        return None # Retorna None para indicar que houve uma exceção
+        return None
 
 def iniciar_processamento():
     """Função chamada pelo programa principal para iniciar a conversão."""
-    caminhos_dos_arquivos = filedialog.askopenfilenames(
+    caminhos = filedialog.askopenfilenames(
         title="Selecione os extratos (Sicoob - Modelo 1)",
-        filetypes=[("Arquivos PDF", "*.pdf")]
+        filetypes=[("PDF", "*.pdf")]
     )
-    if not caminhos_dos_arquivos:
-        raise UserWarning("Nenhum arquivo foi selecionado.")
+    if not caminhos:
+        raise UserWarning("") # Levanta aviso de cancelamento para o menu principal
 
-    sucessos, erros = 0, []
-    for arquivo_path in caminhos_dos_arquivos:
-        nome_arquivo_original = os.path.basename(arquivo_path)
-        try:
-            # Chama a função de extração que agora retorna o DataFrame
-            df_transacoes = extrair_dados_do_pdf(arquivo_path)
-            
-            # A lógica abaixo agora funciona, pois df_transacoes não será None em caso de sucesso
-            if df_transacoes is not None and not df_transacoes.empty:
-                nome_base, _ = os.path.splitext(arquivo_path)
-                caminho_csv = nome_base + '.csv'
-                df_transacoes.to_csv(caminho_csv, index=False, sep=';', encoding='utf-8-sig', decimal=',')
-                print(f"SUCESSO! '{nome_arquivo_original}' salvo em: {caminho_csv}")
-                sucessos += 1
-            elif df_transacoes is not None: # Caso o DataFrame esteja vazio
-                 print(f"AVISO! Nenhuma transação encontrada em '{nome_arquivo_original}'.")
-                 erros.append(f"{nome_arquivo_original} (vazio)")
-            else: # Caso df_transacoes seja None (erro na extração)
-                erros.append(nome_arquivo_original)
-
-        except Exception as e:
-            print(f"ERRO! Falha em '{nome_arquivo_original}': {e}")
-            erros.append(nome_arquivo_original)
+    sucesso_geral = False
+    for path in caminhos:
+        df_transacoes = extrair_dados_do_pdf(path)
+        if df_transacoes is not None and not df_transacoes.empty:
+            csv_path = os.path.splitext(path)[0] + '.csv'
+            df_transacoes.to_csv(csv_path, index=False, sep=';', encoding='utf-8-sig')
+            sucesso_geral = True
     
-    if erros:
-        raise Exception(f"Falha ao processar {len(erros)} arquivo(s): {', '.join(erros)}")
-    if sucessos == 0:
-        raise Exception("Nenhuma transação foi extraída dos arquivos selecionados.")
+    if not sucesso_geral:
+        # Se nenhum arquivo gerou transações, considera como um cancelamento ou falha
+        raise UserWarning("Nenhuma transação válida encontrada nos arquivos selecionados.")
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-    # Para testes diretos, pode-se chamar iniciar_processamento()
-    try:
-        iniciar_processamento()
-        messagebox.showinfo("Concluído", "Processamento finalizado.")
-    except Exception as e:
-        messagebox.showerror("Erro Final", str(e))
+    return True # Retorna True para sinalizar sucesso ao menu principal
